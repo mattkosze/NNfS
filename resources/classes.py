@@ -19,3 +19,27 @@ class SoftMax:
         exp_vals = np.exp(inputs - np.max(inputs, axis=1, keepdims=True))
         probabilities = exp_vals/np.sum(exp_vals, axis=1, keepdims=True)
         self.output = probabilities
+
+class Loss:
+    def calculate(self, output, y):
+        sample_losses = self.forward(output, y)
+        data_loss = np.mean(sample_losses)
+        return data_loss
+
+class CategoricalCrossEntropy(Loss):
+    # number of samples in the batch
+    def forward(self, y_pred, y_true):
+        # identify the number of samples
+        samples = len(y_pred)
+
+        # clip data to prevent absolute 0's
+        y_pred_clipped = np.clip(y_pred, 1e-7, 1 - 1e-7)
+
+        if len(y_true.shape) == 1: # If there are sparsely-encoded labels
+            confidences = y_pred_clipped[range(samples), y_true]
+        elif len(y_true.shape) == 2: # If there are one-hot encoded labels
+            confidences = np.sum(y_pred_clipped * y_true, axis=1)
+
+        # calculate losses
+        losses = -np.log(confidences)
+        return losses
