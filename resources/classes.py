@@ -9,10 +9,25 @@ class DenseLayer:
     def forward(self, inputs):
         # Calculates the output of a forward pass
         self.output = np.dot(inputs, self.weights) + self.biases
+        self.inputs = inputs
+
+    def backward(self, dvalues):
+        # Gradients on parameters; use inputs because it's with respect to the weights
+        self.dweights = np.dot(self.inputs.T, dvalues)
+        self.dbiases = np.sum(dvalues, axis=0, keepdims=True)
+        # Gradients on input values; we use weights because it's with respect to the inputs
+        self.dinputs = np.dot(dvalues, self.weights.T)
 
 class ReLU:
     def forward(self, inputs):
         self.output = np.maximum(0, inputs)
+        self.inputs = inputs
+
+    def backward(self, dvalues):
+        # Creates a copy of the dvalues array
+        self.dinputs = dvalues.copy()
+        # Iterates through the array and sets every value leq 0 to 0
+        self.dinputs[self.inputs <= 0] = 0
 
 class SoftMax:
     def forward(self, inputs):
