@@ -31,9 +31,23 @@ class ReLU:
 
 class SoftMax:
     def forward(self, inputs):
+        self.inputs = inputs
         exp_vals = np.exp(inputs - np.max(inputs, axis=1, keepdims=True))
         probabilities = exp_vals/np.sum(exp_vals, axis=1, keepdims=True)
         self.output = probabilities
+
+    def backward(self, dvalues):
+        # Creates uninitialized arr
+        self.dinputs = np.empty_like(dvalues)
+
+        # Enum. outputs and gradients
+        for index, (singleOutput, singleDvalues) in enumerate(zip(self.output, dvalues)):
+            # Flatten output arr
+            singleOutput = singleOutput.reshape(-1,1)
+            # Calculate jacobian matrix
+            jacobianMatrix = np.diagflat(singleOutput) - np.dot(singleOutput, singleOutput.T)
+            # Sample-wise gradient calculation
+            self.dinputs[index] = np.dot(jacobianMatrix, singleDvalues)
 
 class Loss:
     def calculate(self, output, y):
@@ -58,3 +72,50 @@ class CategoricalCrossEntropy(Loss):
         # calculate losses
         losses = -np.log(confidences)
         return losses
+
+    def backward(self, dvalues, y_true):
+        # identify the number of samples
+        samples = len(dvalues)
+
+        # find the number of labels in every sample
+        labels = len(dvalues[0])
+
+        # transform to one-hot encoding if sparse
+        if len(y_true.shape) == 1:
+            # np.eye() creates a 2d array with ones on a specific diagonal and zeros elsewhere; an "a la identity" matrix
+            y_true = np.eye(labels)[y_true]
+
+        # calculate the gradient
+        self.dinputs = -y_true / dvalues
+        # normalize the gradient
+        self.dinputs /= samples
+
+class SoftMaxCategoricalCrossEntropy():
+    # Creates new activation and loss function objects
+    def __init__(self):
+        self.activation = SoftMax()
+        self.loss = CategoricalCrossEntropy()
+
+    # Forward pass
+    def forward(self, inputs, y_true):
+        # Output layers activation function
+        self.activation.forward(inputs)
+        # Set the output
+        self.output = self.activation.output
+        # Calculate and return loss
+        return self.loss.calculate(self.output, y_true)
+
+    # Backward pass
+    def backward(self, dvalues, y_true):
+        # Number of samples
+        samples = len(dvalues)
+        # Spare encoded guaranteed
+        if len(y_true.shape) == 2:
+            y_true = np.argmax(y_true, axis=1)
+
+        # Copy the values for modification
+        self.dinputs = dvalues.copy()
+        # Calculate gradient
+        self.dinputs[range(samples), y_true] -= 1
+        # Normalize gradient
+        self.dinputs /= samples
