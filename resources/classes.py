@@ -119,3 +119,15 @@ class SoftMaxCategoricalCrossEntropy():
         self.dinputs[range(samples), y_true] -= 1
         # Normalize gradient
         self.dinputs /= samples
+
+class SGD():
+    # Set class initialization
+    def __init__(self, lr=1.0):
+        # Store the assigned learning rate
+        self.lr = lr
+
+    # Update our paramaters
+    def updateParams(self, layer):
+        # Update the weights =- learning_rate - parameter_gradient
+        layer.weights += -self.lr * layer.dweights
+        layer.biases += -self.lr * layer.dbiases
