@@ -90,7 +90,7 @@ class CategoricalCrossEntropy(Loss):
         # normalize the gradient
         self.dinputs /= samples
 
-class SoftMaxCategoricalCrossEntropy():
+class SoftMaxCategoricalCrossEntropy:
     # Creates new activation and loss function objects
     def __init__(self):
         self.activation = SoftMax()
@@ -120,14 +120,120 @@ class SoftMaxCategoricalCrossEntropy():
         # Normalize gradient
         self.dinputs /= samples
 
-class SGD():
+class SGD:
     # Set class initialization
-    def __init__(self, lr=1.0):
-        # Store the assigned learning rate
+    def __init__(self, lr=1., decay=0., momentum=0.):
+        # Store the assigned learning rate, current lr, decay rate, and iterations
         self.lr = lr
+        self.lr_curr = lr
+        self.decay = decay
+        self.iteration = 0
+        self.momentum = momentum
+
+    # Call to update learning rate before any parameter update
+    def preUpdateParams(self):
+        # If there is a nonzero decay, update the lr before updating the parameters
+        if self.decay:
+            self.lr_curr = self.lr * (1. / (1. + self.decay * self.iteration))
 
     # Update our paramaters
     def updateParams(self, layer):
-        # Update the weights =- learning_rate - parameter_gradient
-        layer.weights += -self.lr * layer.dweights
-        layer.biases += -self.lr * layer.dbiases
+        # SGD with momentum calculation
+        if self.momentum:
+            # If layer does not have a momentum array, create it
+            if not hasattr(layer, 'weight_momentums'):
+                layer.weight_momentums = np.zeros_like(layer.weights)
+                # No momentum array --> no bias array; so create it too.
+                layer.bias_momentums = np.zeros_like(layer.biases)
+
+            # Build weight updates with momentum
+            weight_updates = self.momentum * layer.weight_momentums - self.lr_curr * layer.dweights
+            layer.weight_momentums = weight_updates
+
+            # Build bias updates with momentum
+            bias_updates = self.momentum * layer.bias_momentums - self.lr_curr * layer.dbiases
+            layer.bias_momentums = bias_updates
+        # SGD without momentum calculation
+        else:
+            weight_updates = -self.lr_curr * layer.dweights
+            bias_updates = -self.lr_curr * layer.dbiases
+
+        # With updates now calculated, update both weights and biases
+        layer.weights += weight_updates
+        layer.biases += bias_updates
+
+    # Call after a parameter update
+    def postUpdateParams(self):
+        self.iteration += 1
+
+class AdaGrad(SGD):
+    def __init__(self, lr=1., decay=0., epsilon=1e-7):
+        super().__init__(lr, decay)
+        self.epsilon = epsilon
+
+    def updateParams(self, layer):
+        # If layer does not contain cache arrays, create them
+        if not hasattr(layer, 'weight_cache'):
+            layer.weight_cache = np.zeros_like(layer.weights)
+            layer.bias_cache = np.zeros_like(layer.biases)
+
+        # Update cache with gradients squared
+        layer.weight_cache += layer.dweights ** 2
+        layer.bias_cache += layer.dbiases ** 2
+
+        # Vanilla SGD parameter update & norm
+        layer.weights += -self.lr_curr * layer.dweights / (np.sqrt(layer.weight_cache) + self.epsilon)
+        layer.biases += -self.lr_curr * layer.dbiases / (np.sqrt(layer.bias_cache) + self.epsilon)
+
+class RMSProp(SGD):
+    def __init__(self, lr=1., decay=0., epsilon=1e-7, rho=0.9):
+        super().__init__(lr, decay)
+        self.epsilon = epsilon
+        self.rho = rho
+
+    def updateParams(self, layer):
+        # Create cache arrays if not pre-existing
+        if not hasattr(layer, 'weight_cache'):
+            layer.weight_cache = np.zeros_like(layer.weights)
+            layer.bias_cache = np.zeros_like(layer.biases)
+
+        # Update cache with squared current gradients
+        layer.weight_cache = self.rho * layer.weight_cache + (1 - self.rho) * layer.dweights ** 2
+        layer.bias_cache = self.rho * layer.bias_cache + (1 - self.rho) * layer.dbiases ** 2
+
+        # Vanilla SGD parameter update & norm
+        layer.weights += -self.lr_curr * layer.dweights / (np.sqrt(layer.weight_cache) + self.epsilon)
+        layer.biases += -self.lr_curr * layer.dbiases / (np.sqrt(layer.bias_cache) + self.epsilon)
+
+class Adam(RMSProp):
+    def __init__(self, lr=0.001, decay=0., epsilon=1e-7, beta1=0.9, beta2=0.999):
+        super().__init__(lr, decay, epsilon)
+        self.beta1 = beta1
+        self.beta2 = beta2
+
+    def updateParams(self, layer):
+        # Create cache arrays
+        if not hasattr(layer, 'weight_cache'):
+            layer.weight_momentums = np.zeros_like(layer.weights)
+            layer.weight_cache = np.zeros_like(layer.weights)
+            layer.bias_momentums = np.zeros_like(layer.biases)
+            layer.bias_cache = np.zeros_like(layer.biases)
+
+        # Update momentum
+        layer.weight_momentums = self.beta1 * layer.weight_momentums + (1 - self.beta1) * layer.dweights
+        layer.bias_momentums = self.beta1 * layer.bias_momentums + (1 - self.beta1) * layer.dbiases
+
+        # Correct momentum
+        weight_momentums_corrected = layer.weight_momentums / (1 - self.beta1 ** (self.iteration + 1))
+        bias_momentums_corrected = layer.bias_momentums / (1 - self.beta1 ** (self.iteration + 1))
+        # Update the cache with current gradients
+        layer.weight_cache = self.beta2 * layer.weight_cache + (1 - self.beta2) * layer.dweights ** 2
+        layer.bias_cache = self.beta2 * layer.bias_cache + (1 - self.beta2) * layer.dbiases ** 2
+
+        # Correct cache
+        weight_cache_corrected = layer.weight_cache / (1 - self.beta2 ** (self.iteration + 1))
+        bias_cache_corrected = layer.bias_cache / (1 - self.beta2 ** (self.iteration + 1))
+
+        # Vanilla SGD parameter update + norm with square rooted cache
+        layer.weights += -self.lr_curr * weight_momentums_corrected / (np.sqrt(weight_cache_corrected) + self.epsilon)
+        layer.biases += -self.lr_curr * bias_momentums_corrected / (np.sqrt(bias_cache_corrected) + self.epsilon)
