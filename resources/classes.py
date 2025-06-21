@@ -1,10 +1,15 @@
 import numpy as np
 
 class DenseLayer:
-    def __init__(self, nInputs, nNeurons):
+    def __init__(self, nInputs, nNeurons, weightl1=0, weightl2=0, biasl1=0, biasl2=0):
         # Method to randomly initialize the weights and biases
         self.weights = 0.01 * np.random.randn(nInputs, nNeurons) # creates matrix of size (nInputs x nNeurons) with random integers between -1 and 1 scaled down by 0.01. We scale this down to have weights a couple of magnitudes smaller, meaning less time spent fitting. Not an absolute rule, and something to play with.
         self.biases = np.zeros((1, nNeurons)) # creates an array filled with 0's of size (1 x nNeurons)
+        # Store regularization strength
+        self.weightl1 = weightl1
+        self.weightl2 = weightl2
+        self.biasl1 = biasl1
+        self.biasl2 = biasl2
 
     def forward(self, inputs):
         # Calculates the output of a forward pass
@@ -15,6 +20,24 @@ class DenseLayer:
         # Gradients on parameters; use inputs because it's with respect to the weights
         self.dweights = np.dot(self.inputs.T, dvalues)
         self.dbiases = np.sum(dvalues, axis=0, keepdims=True)
+
+        # L1 on weights
+        if self.weightl1 > 0:
+            dl1 = np.ones_like(self.weights)
+            dl1[self.weights < 0] = -1
+            self.dweights += self.weightl1 * dl1
+        # L1 on biases
+        if self.biasl1 > 0:
+            dl1 = np.ones_like(self.biases)
+            dl1[self.biases < 0] = -1
+            self.dbiases += self.biasl1 * dl1
+        # L2 on weights
+        if self.weightl2 > 0:
+            self.dweights += 2 * self.weightl2 * self.weights
+        # L2 on biases
+        if self.biasl2 > 0:
+            self.dbiases += 2 * self.biasl2 * self.biases
+
         # Gradients on input values; we use weights because it's with respect to the inputs
         self.dinputs = np.dot(dvalues, self.weights.T)
 
@@ -54,6 +77,28 @@ class Loss:
         sample_losses = self.forward(output, y)
         data_loss = np.mean(sample_losses)
         return data_loss
+
+    def regularizationLoss(self, layer):
+        # Set it to 0 by default
+        regLoss = 0
+
+        # L1 reg for weights
+        if layer.weightl1 > 0:
+            regLoss += layer.weightl1 * np.sum(np.abs(layer.weights))
+
+        # L1 reg for biases
+        if layer.biasl1 > 0:
+            regLoss += layer.biasl1 * np.sum(np.abs(layer.biases))
+
+        # L2 reg for weights
+        if layer.weightl2 > 0:
+            regLoss += layer.weightl2 * np.sum(layer.weights ** 2)
+
+        # L2 reg for bises
+        if layer.biasl2 > 0:
+            regLoss += layer.biasl2 * np.sum(layer.biases ** 2)
+
+        return regLoss
 
 class CategoricalCrossEntropy(Loss):
     # number of samples in the batch
