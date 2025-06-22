@@ -282,3 +282,25 @@ class Adam(RMSProp):
         # Vanilla SGD parameter update + norm with square rooted cache
         layer.weights += -self.lr_curr * weight_momentums_corrected / (np.sqrt(weight_cache_corrected) + self.epsilon)
         layer.biases += -self.lr_curr * bias_momentums_corrected / (np.sqrt(bias_cache_corrected) + self.epsilon)
+
+
+class DropoutLayer:
+    # Method to initialize
+    def __init__(self, rate):
+        # Remember, we invert the rate
+        self.rate = (1 - rate)
+
+    # Forward pass method
+    def forward(self, inputs):
+        # Save the inputs
+        self.inputs = inputs
+        # Create mask and scale it
+        self.binaryMask = np.random.binomial(1, self.rate, size=inputs.shape) / self.rate
+        # Apply the mask to the outputs
+        self.output = inputs * self.binaryMask
+
+    # Backward pass method
+    def backward(self, dvalues):
+        # The gradient
+        self.dinputs = dvalues * self.binaryMask
+
